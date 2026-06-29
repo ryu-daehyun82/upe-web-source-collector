@@ -132,6 +132,33 @@ def test_org_id_str_persisted(session_factory):
     asyncio.run(_test())
 
 
+def test_leak_probe_not_persisted(session_factory):
+    # 원문(original_text)은 _leak_probe로 분리되지만 영속화 feature_json엔 남으면 안 된다.
+    async def _test():
+        async with session_factory() as session:
+            sid = await _make_source(session)
+            raw = {
+                "layout_similarity": 0.1,
+                "original_text": "secret source body that must not be stored",
+                "pattern_text": "",
+                "section_order": ["main"],
+            }
+            pat, decision = await build_and_persist_pattern(
+                session, source_id=sid, raw_feature=raw,
+                pattern_type="layout", license_status="allowed",
+            )
+            await session.commit()
+            # 거버넌스 abstracted_feature엔 _leak_probe가 있지만(점수용),
+            assert "_leak_probe" in decision.abstracted_feature
+            # 저장된 feature_json엔 _ 접두 키도 원문도 없어야 한다.
+            assert all(not k.startswith("_") for k in pat.feature_json)
+            assert "original_text" not in pat.feature_json
+            dumped = str(pat.feature_json)
+            assert "secret source body" not in dumped
+
+    asyncio.run(_test())
+
+
 def test_feature_json_is_abstracted_not_raw(session_factory):
     async def _test():
         async with session_factory() as session:

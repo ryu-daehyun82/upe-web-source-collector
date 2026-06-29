@@ -37,8 +37,13 @@ async def persist_pattern(
 ) -> WebPattern:
     """GovernanceDecision 을 WebPattern 행으로 영속화·flush·반환.
 
-    feature_json 에는 원본이 아니라 decision.abstracted_feature(추상화본)를 저장한다.
+    feature_json 에는 원본이 아니라 decision.abstracted_feature(추상화본)를 저장하되,
+    `_` 접두 내부키(예: _leak_probe — 누출검사용 원문 비교 컨텍스트)는 영속화에서 제외해
+    원문이 DB 에 남지 않도록 한다.
     """
+    feature_json = {
+        k: v for k, v in decision.abstracted_feature.items() if not k.startswith("_")
+    }
     pattern = WebPattern(
         source_id=_as_uuid(source_id),
         org_id=_as_uuid(org_id) if org_id else None,
@@ -49,7 +54,7 @@ async def persist_pattern(
         reuse_score=decision.reuse_score,
         reuse_hardrule=decision.reuse_hardrule,
         recon_test_passed=decision.recon_test_passed,
-        feature_json=decision.abstracted_feature,
+        feature_json=feature_json,
         license_status=license_status,
         pii_status=decision.pii_status,
         quality_score=quality_score,
