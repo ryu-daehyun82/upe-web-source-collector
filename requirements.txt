@@ -1,0 +1,19 @@
+# UPE Web Source Collector — Sprint 0 (Policy-first 골격)
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+pydantic-settings>=2.2
+sqlalchemy>=2.0
+greenlet>=3.0          # SQLAlchemy async 필수 의존성
+asyncpg>=0.29
+psycopg2-binary>=2.9
+httpx>=0.27
+# Sprint 1+ (수집/파싱): playwright, redis, aiokafka, pgvector — 추후
+# 재사용 어댑터(추후): emotional-support-harvester, pdf-layer-rebuilder-mcp, gcr-eare
+# Reuse Risk Score 엔진(app/pattern/*): 순수 stdlib(간이 MinHash 자체구현,
+#   datasketch 미사용). 신규 런타임 의존성 없음. 실 검출기(logo/face/artwork)·
+#   gcr-eare layout/color 는 어댑터 인터페이스로만 — Sprint 1+ 연결.
+pytest>=8.0
+pytest-asyncio>=0.23
+aiosqlite>=0.20    # 테스트용 async sqlite (DB 통합테스트)
+httpx>=0.27        # robots fetch + FastAPI TestClient
