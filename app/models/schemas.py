@@ -46,3 +46,53 @@ class DeleteRequestResponse(BaseModel):
     source_id: str
     crawl_status: str
     status: str
+
+
+# --- §6.3 Crawl Job 생성 ---
+class CrawlJobCreateRequest(BaseModel):
+    source_id: str
+    job_type: str = "fetch_html"
+    priority: int = 100
+    content_hash: str | None = None
+    job_config: dict | None = None
+
+
+class CrawlJobCreateResponse(BaseModel):
+    job_id: str
+    status: str
+    created: bool
+
+
+# --- §6.4 Pattern 승인/차단 ---
+class PatternReviewRequest(BaseModel):
+    reviewer_id: str
+    reason: str | None = None
+
+
+class PatternReviewResponse(BaseModel):
+    pattern_id: str
+    pattern_status: str
+
+
+# --- 운영: 삭제 전파 / 재검증 ---
+class ApplyDeleteRequest(BaseModel):
+    request_id: str | None = None
+    actor_id: str | None = None
+
+
+class ApplyDeleteResponse(BaseModel):
+    source_id: str
+    patterns_blocked: int
+    snapshots_blocked: int
+    status: str
+
+
+class RecheckRequest(BaseModel):
+    result: str
+    actor_id: str | None = None
+
+
+class RecheckResponse(BaseModel):
+    source_id: str
+    action: str
+    patterns_blocked: int

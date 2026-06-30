@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
-from app.api import web_sources
+from app.api import operations, web_sources
 
 app = FastAPI(
     title="UPE Web Source Collector",
@@ -15,6 +15,7 @@ app = FastAPI(
 )
 
 app.include_router(web_sources.router, prefix="/api/v1", tags=["web-sources"])
+app.include_router(operations.router, prefix="/api/v1", tags=["operations"])
 
 
 @app.get("/health")
