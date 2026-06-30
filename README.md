@@ -1,5 +1,7 @@
 # UPE Web Source Collector
 
+[![CI](https://github.com/ryu-daehyun82/upe-web-source-collector/actions/workflows/ci.yml/badge.svg)](https://github.com/ryu-daehyun82/upe-web-source-collector/actions/workflows/ci.yml)
+
 > Universal Pattern Extractor(UPE)의 **웹 패턴 거버넌스 파이프라인**.
 > 스크래퍼가 아니라 — 허용된 원천에서 **구조적 패턴만** 추출하고, 원본 표현(저작권/PII) 재사용 위험을 차단·감사·삭제할 수 있는 프로덕션 인프라.
 
