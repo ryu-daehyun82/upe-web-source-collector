@@ -43,8 +43,14 @@ async def process_crawl_job(
     if not poc.get("ok"):
         return {"ok": False, "stage": "postcheck", "reason": poc.get("reason"), "pattern_id": None}
 
-    # 4) parse → raw_feature
-    raw_feature = parser(res.get("text") or "", url=res.get("url"))
+    # 4) parse → raw_feature.
+    #    워커가 feature 를 이미 산출(예: PDFParseWorker)했으면 그대로 사용,
+    #    아니면(텍스트형: HTTP/Playwright) parser 로 text → feature.
+    feature = res.get("feature")
+    if feature is not None:
+        raw_feature = feature
+    else:
+        raw_feature = parser(res.get("text") or "", url=res.get("url"))
 
     # 5) 거버넌스 + 영속화
     pattern, decision = await build_and_persist_pattern(
