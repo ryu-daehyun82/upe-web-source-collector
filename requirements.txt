@@ -9,7 +9,8 @@ asyncpg>=0.29
 psycopg2-binary>=2.9
 httpx>=0.27
 redis>=5.0             # Frontier 큐 백엔드 + 도메인 politeness 토큰버킷(§13.1/§13.2)
-# Sprint 1+ (수집/파싱): playwright, aiokafka, pgvector — 추후
+# playwright>=1.40     # PlaywrightWorker 동적 렌더(운영 전용, 무거움 — 워커가 지역 import; 테스트는 가짜 renderer)
+# Sprint 1+ (수집/파싱): aiokafka, pgvector — 추후
 # 재사용 어댑터(추후): emotional-support-harvester, pdf-layer-rebuilder-mcp, gcr-eare
 # Reuse Risk Score 엔진(app/pattern/*): 순수 stdlib(간이 MinHash 자체구현,
 #   datasketch 미사용). 신규 런타임 의존성 없음. 실 검출기(logo/face/artwork)·
