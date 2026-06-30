@@ -53,17 +53,32 @@ def _iter_pages(parquet_path: str):
     import pyarrow.parquet as pq
     from PIL import Image
 
-    t = pq.read_table(parquet_path, columns=["image", "bboxes", "labels"]).to_pydict()
-    for img, bbs, labs in zip(t["image"], t["bboxes"], t["labels"]):
+    cols = set(pq.ParquetFile(parquet_path).schema_arrow.names)
+    bbox_col = "bboxes" if "bboxes" in cols else "bbox"          # 미러별 컬럼명 차이 흡수
+    label_col = "labels" if "labels" in cols else "categories"
+    t = pq.read_table(parquet_path, columns=["image", bbox_col, label_col]).to_pydict()
+    for img, bbs, labs in zip(t["image"], t[bbox_col], t[label_col]):
         w, h = Image.open(io.BytesIO(img["bytes"])).size
         yield w, h, row_to_regions(bbs, labs)
 
 
-async def _run(args) -> int:
+def _resolve_parquets(args) -> tuple[list[str], str]:
+    """로컬 glob(우선) 또는 HF 다운로드. (경로목록, 출처url) 반환."""
+    import glob as _glob
+    if args.local_glob:
+        paths = sorted(_glob.glob(args.local_glob))
+        return paths, f"https://huggingface.co/datasets/{args.repo}"
     from huggingface_hub import hf_hub_download
-
     path = hf_hub_download(repo_id=args.repo, filename=args.file, repo_type="dataset")
-    print(f"[publaynet] parquet={path} ({os.path.getsize(path) // 1048576} MB)")
+    return [path], f"https://huggingface.co/datasets/{args.repo}"
+
+
+async def _run(args) -> int:
+    paths, src_url = _resolve_parquets(args)
+    if not paths:
+        print("[publaynet] parquet 0개 — --local-glob/--file 확인")
+        return 1
+    print(f"[publaynet] parquet {len(paths)}개 ({sum(os.path.getsize(p) for p in paths)//1048576} MB)")
 
     engine = create_async_engine(args.db_url)
     if args.create_tables:
@@ -74,23 +89,26 @@ async def _run(args) -> int:
     async with factory() as session:
         sid = uuid.uuid4()
         session.add(WebSource(
-            id=sid, url=f"https://huggingface.co/datasets/{args.repo}", domain="huggingface.co",
+            id=sid, url=src_url, domain="huggingface.co",
             source_type="publaynet", crawl_status=SourceStatus.parsed.value,
             license_status="allowed", discovery_method="hf_parquet",
         ))
         await session.flush()
         n = appr = skip = 0
-        for w, h, regions in _iter_pages(path):
-            feat = parse_doclaynet_page(w, h, regions)
-            if feat.get("layout_type") == "unknown":
-                skip += 1
-                continue
-            _p, d = await build_and_persist_pattern(
-                session, source_id=sid, raw_feature=feat,
-                pattern_type="document_layout", license_status="allowed",
-            )
-            n += 1
-            appr += 1 if d.operational else 0
+        for path in paths:
+            for w, h, regions in _iter_pages(path):
+                feat = parse_doclaynet_page(w, h, regions)
+                if feat.get("layout_type") == "unknown":
+                    skip += 1
+                    continue
+                _p, d = await build_and_persist_pattern(
+                    session, source_id=sid, raw_feature=feat,
+                    pattern_type="document_layout", license_status="allowed",
+                )
+                n += 1
+                appr += 1 if d.operational else 0
+                if args.limit and n >= args.limit:
+                    break
             if args.limit and n >= args.limit:
                 break
         await session.commit()
@@ -104,7 +122,8 @@ async def _run(args) -> int:
 def main() -> int:
     p = argparse.ArgumentParser(description="PubLayNet(HF parquet) → web_patterns 적재")
     p.add_argument("--repo", default="vikp/publaynet_bench", help="HF dataset repo")
-    p.add_argument("--file", default="data/train-00000-of-00001.parquet", help="parquet 경로")
+    p.add_argument("--file", default="data/train-00000-of-00001.parquet", help="HF parquet 경로")
+    p.add_argument("--local-glob", default=None, help="로컬 parquet glob(지정 시 HF 다운로드 대신 사용)")
     p.add_argument("--db-url", default=None, help="async DB URL (기본 UPE_DATABASE_URL 또는 sqlite 파일)")
     p.add_argument("--create-tables", action="store_true")
     p.add_argument("--limit", type=int, default=None)
