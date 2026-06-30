@@ -33,6 +33,7 @@ from app.pattern_build import build_and_persist_pattern  # noqa: E402
 from app.policy.url_canon import extract_domain  # noqa: E402
 from app.workers.doclaynet_parser import parse_doclaynet_coco  # noqa: E402
 from app.workers.chart_pattern_parser import parse_chart_dataset  # noqa: E402
+from app.workers.aihub_chart_parser import parse_aihub_chart  # noqa: E402
 
 
 # source 별 설정(패턴 타입·라이선스 태그)
@@ -45,6 +46,11 @@ SOURCE_CONFIG: dict[str, dict] = {
     "chart": {
         "pattern_type": "chart",
         "license_status": "conditional_approved",  # AIHub 비상업·약관 수락
+        "default_url": "https://www.aihub.or.kr/aihubdata/data/view.do?dataSetSn=71957",
+    },
+    "aihub_chart": {
+        "pattern_type": "chart",
+        "license_status": "conditional_approved",  # AIHub 비상업·약관 수락(제1유형)
         "default_url": "https://www.aihub.or.kr/aihubdata/data/view.do?dataSetSn=71957",
     },
 }
@@ -69,6 +75,10 @@ def load_features(source: str, path: str, *, source_url: str | None = None) -> l
             items = [data]
         return parse_chart_dataset(items, url=source_url or path)
 
+    if source == "aihub_chart":
+        # AIHub 차트 라벨 = 파일 1개당 차트 1개(nested annotations 스키마)
+        return [parse_aihub_chart(data, url=source_url or path)]
+
     raise ValueError(f"unknown source: {source}")
 
 
@@ -76,6 +86,8 @@ def load_features_from_input(source: str, input_path: str, *, source_url: str | 
     """파일 또는 디렉터리(.json glob) → 통합 raw_feature 리스트."""
     if os.path.isdir(input_path):
         paths = sorted(glob.glob(os.path.join(input_path, "*.json")))
+        if not paths:  # 중첩 디렉터리면 재귀 글롭
+            paths = sorted(glob.glob(os.path.join(input_path, "**", "*.json"), recursive=True))
     else:
         paths = [input_path]
     features: list[dict] = []
