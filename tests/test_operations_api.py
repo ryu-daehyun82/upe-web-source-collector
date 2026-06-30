@@ -46,6 +46,10 @@ def client():
     app.dependency_overrides.clear()
 
 
+# RBAC: admin 역할 헤더(모든 권한 보유)
+_ADMIN = {"X-Upe-Roles": "admin", "X-Upe-Actor": "op1"}
+
+
 def _seed_source(factory) -> str:
     sid = uuid.uuid4()
 
@@ -80,26 +84,26 @@ def _seed_pattern(factory, source_id: str) -> str:
 
 def test_create_crawl_job(client):
     sid = _seed_source(client._factory)
-    r = client.post("/api/v1/crawl-jobs", json={"source_id": sid, "job_type": "fetch_html"})
+    r = client.post("/api/v1/crawl-jobs", json={"source_id": sid, "job_type": "fetch_html"}, headers=_ADMIN)
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["created"] is True
     assert body["status"] == "queued"
     # 멱등: 동일 (source, type, hash) 재호출 → created False
-    r2 = client.post("/api/v1/crawl-jobs", json={"source_id": sid, "job_type": "fetch_html"})
+    r2 = client.post("/api/v1/crawl-jobs", json={"source_id": sid, "job_type": "fetch_html"}, headers=_ADMIN)
     assert r2.json()["created"] is False
     assert r2.json()["job_id"] == body["job_id"]
 
 
 def test_create_crawl_job_source_404(client):
-    r = client.post("/api/v1/crawl-jobs", json={"source_id": str(uuid.uuid4()), "job_type": "fetch_html"})
+    r = client.post("/api/v1/crawl-jobs", json={"source_id": str(uuid.uuid4()), "job_type": "fetch_html"}, headers=_ADMIN)
     assert r.status_code == 404
 
 
 def test_approve_pattern(client):
     sid = _seed_source(client._factory)
     pid = _seed_pattern(client._factory, sid)
-    r = client.post(f"/api/v1/web-patterns/{pid}/approve", json={"reviewer_id": "op1", "reason": "ok"})
+    r = client.post(f"/api/v1/web-patterns/{pid}/approve", json={"reviewer_id": "op1", "reason": "ok"}, headers=_ADMIN)
     assert r.status_code == 200, r.text
     assert r.json()["pattern_status"] == "approved"
 
@@ -107,20 +111,20 @@ def test_approve_pattern(client):
 def test_block_pattern(client):
     sid = _seed_source(client._factory)
     pid = _seed_pattern(client._factory, sid)
-    r = client.post(f"/api/v1/web-patterns/{pid}/block", json={"reviewer_id": "op1", "reason": "brand risk"})
+    r = client.post(f"/api/v1/web-patterns/{pid}/block", json={"reviewer_id": "op1", "reason": "brand risk"}, headers=_ADMIN)
     assert r.status_code == 200
     assert r.json()["pattern_status"] == "blocked"
 
 
 def test_pattern_404(client):
-    r = client.post(f"/api/v1/web-patterns/{uuid.uuid4()}/approve", json={"reviewer_id": "op1"})
+    r = client.post(f"/api/v1/web-patterns/{uuid.uuid4()}/approve", json={"reviewer_id": "op1"}, headers=_ADMIN)
     assert r.status_code == 404
 
 
 def test_apply_delete(client):
     sid = _seed_source(client._factory)
     _seed_pattern(client._factory, sid)
-    r = client.post(f"/api/v1/web-sources/{sid}/apply-delete", json={"actor_id": "admin"})
+    r = client.post(f"/api/v1/web-sources/{sid}/apply-delete", json={"actor_id": "admin"}, headers=_ADMIN)
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["patterns_blocked"] == 1
@@ -130,7 +134,7 @@ def test_apply_delete(client):
 def test_recheck_hold(client):
     sid = _seed_source(client._factory)
     _seed_pattern(client._factory, sid)
-    r = client.post(f"/api/v1/web-sources/{sid}/recheck", json={"result": "license_changed"})
+    r = client.post(f"/api/v1/web-sources/{sid}/recheck", json={"result": "license_changed"}, headers=_ADMIN)
     assert r.status_code == 200, r.text
     assert r.json()["action"] == "hold"
     assert r.json()["patterns_blocked"] == 1
@@ -138,10 +142,10 @@ def test_recheck_hold(client):
 
 def test_recheck_unknown_400(client):
     sid = _seed_source(client._factory)
-    r = client.post(f"/api/v1/web-sources/{sid}/recheck", json={"result": "??bogus"})
+    r = client.post(f"/api/v1/web-sources/{sid}/recheck", json={"result": "??bogus"}, headers=_ADMIN)
     assert r.status_code == 400
 
 
 def test_recheck_source_404(client):
-    r = client.post(f"/api/v1/web-sources/{uuid.uuid4()}/recheck", json={"result": "unchanged"})
+    r = client.post(f"/api/v1/web-sources/{uuid.uuid4()}/recheck", json={"result": "unchanged"}, headers=_ADMIN)
     assert r.status_code == 404

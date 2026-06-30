@@ -22,6 +22,7 @@ from app.models.schemas import (
 )
 from app.jobs import enqueue_crawl_job
 from app.delete_recheck import apply_delete, apply_recheck_result
+from app.rbac import Permission, require
 
 router = APIRouter()
 
@@ -37,6 +38,7 @@ def _as_uuid(v: str) -> uuid.UUID:
 async def create_crawl_job(
     req: CrawlJobCreateRequest,
     session: AsyncSession = Depends(get_session),
+    _=Depends(require(Permission.crawl_job_create)),
 ) -> CrawlJobCreateResponse:
     """§6.3 크롤 작업 멱등 생성. source.url 로 enqueue."""
     sid = _as_uuid(req.source_id)
@@ -61,6 +63,7 @@ async def approve_pattern(
     pattern_id: str,
     req: PatternReviewRequest,
     session: AsyncSession = Depends(get_session),
+    _=Depends(require(Permission.pattern_approve)),
 ) -> PatternReviewResponse:
     """§6.4 패턴 승인 → pattern_status=approved + 감사."""
     pid = _as_uuid(pattern_id)
@@ -83,6 +86,7 @@ async def block_pattern(
     pattern_id: str,
     req: PatternReviewRequest,
     session: AsyncSession = Depends(get_session),
+    _=Depends(require(Permission.pattern_block)),
 ) -> PatternReviewResponse:
     """§6.4 패턴 차단 → pattern_status=blocked + 감사."""
     pid = _as_uuid(pattern_id)
@@ -105,6 +109,7 @@ async def apply_delete_route(
     source_id: str,
     req: ApplyDeleteRequest,
     session: AsyncSession = Depends(get_session),
+    _=Depends(require(Permission.delete_apply)),
 ) -> ApplyDeleteResponse:
     """삭제 전파(§6.5): 패턴 blocked·embedding 무효화·스냅샷 차단·삭제요청 resolved."""
     sid = _as_uuid(source_id)
@@ -127,6 +132,7 @@ async def recheck_route(
     source_id: str,
     req: RecheckRequest,
     session: AsyncSession = Depends(get_session),
+    _=Depends(require(Permission.recheck)),
 ) -> RecheckResponse:
     """재검증(§11): 결과별 처리(unchanged/hold/removed). 알 수 없는 result 는 400."""
     sid = _as_uuid(source_id)
