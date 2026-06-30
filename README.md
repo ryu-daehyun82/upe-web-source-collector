@@ -20,13 +20,31 @@ Seed → Frontier → Web Source API → Policy Gate(robots/license/PII)
 - **Crawl Job**: queued → policy_checking → ready → running → succeeded / failed_retryable / failed_terminal / cancelled
 - **Pattern**: built → abstraction_checked → reuse_risk_scored → approved / blocked / deprecated
 
-## Sprint 0 범위 (현재)
+## 구현 현황 (422 tests green)
 
-Policy-first 골격 — web_sources·crawl_policies DDL · Source 등록 API · robots checker · license 상태기계.
+설계서 v2.0/v2.1/스파이크의 핵심 워크플로우가 구현·테스트·실사용 검증됨.
+
+**수집 전(pre-fetch)** — `crawl_planner.CrawlPlanner`
+- `frontier`(canon·dedup·depth/domain·sitemap) → `robots_checker`(SSRF 차단) → `redis_backend`(politeness 토큰버킷) → `jobs`(멱등 enqueue)
+
+**워커(§8, 동일 WebWorker 계약)** — `runner.process_crawl_job`
+- `http_worker`(정적) · `playwright_worker`(동적, 우회 차단) · `pdf_worker`/`file_parse_worker`(바이너리)
+- 파서: `html_parser`/`pdf_parser`/`ppt_parser`/`image_parser`/`video_parser`(어댑터+폴백)
+
+**거버넌스(§9, 핵심 IP)** — `pipeline.run_pattern_governance`
+- `abstraction_guard`(원본 제거) → PII(`adapters/pii`) → 시각검출(`adapters/vision`) → `reuse_risk`(하드룰+가중합) → `reconstruction_test`(G4) → `GovernanceDecision`
+- 보정: `golden_set`(critical recall=100% 릴리즈 게이트), `brand_risk_lookup`
+
+**영속화·상태·운영**
+- `pattern_build`(web_patterns, `_leak_probe` 원문 제외) · `job_state`(상태 전이) · `retry_policy`(§7.3) · `operational_gate`(§4.3)
+- `events`(§7 Kafka 토픽) · `metrics`(§12 KPI/SLO/Alert) · `delete_recheck`(§11/§6.5) · `rbac`(§13.3)
+
+**API(§6)** — `api/web_sources`(등록/policy-check/delete) + `api/operations`(crawl-jobs/pattern approve·block/apply-delete/recheck, RBAC 강제)
 
 ## 스택
 
-Python 3.11 / FastAPI / PostgreSQL+pgvector / (Kafka·Redis·Playwright는 Sprint 5).
+Python 3.11 / FastAPI / SQLAlchemy(async) / PostgreSQL+pgvector(운영)·sqlite(테스트).
+운영 백엔드는 지역 import 어댑터 — Redis · Kafka(aiokafka) · Playwright · Prometheus · 테스트는 폴백(InMemory/fakeredis/가짜).
 
 ## 실행
 
@@ -34,12 +52,12 @@ Python 3.11 / FastAPI / PostgreSQL+pgvector / (Kafka·Redis·Playwright는 Sprin
 pip install -r requirements.txt
 psql < sql/001_init.sql        # DDL
 uvicorn app.main:app --reload  # API
-pytest tests/
+pytest tests/                  # 422 tests
 ```
 
-## 재사용 (보유 자산 어댑터)
+## 재사용 (보유 자산 어댑터 — 인터페이스 고정, 폴백 동작)
 
-PII=harvester `pii_filter` · dedup=harvester `dedup` · PDF=`pdf-layer-rebuilder-mcp` · layout/color=`gcr-eare` · face=`makeup-ai-py identity_guard`. 복붙 금지, 어댑터 import.
+PII=harvester `pii_filter` · dedup=harvester `dedup` · PDF=`pdf-layer-rebuilder-mcp` · layout/color=`gcr-eare` · face=`makeup-ai-py identity_guard` · 이미지=Pillow · 영상=ffprobe. 복붙 금지, 어댑터 import(미존재 시 self-contained 폴백).
 
 ## ⚠️ 원칙
 
