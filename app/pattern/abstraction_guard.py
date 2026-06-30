@@ -44,6 +44,12 @@ ABSTRACTION_ALLOWED: frozenset[str] = frozenset(
         "table_structure",      # 표 구조(행/열 수 등)
         "card_count",           # 카드 수
         "slide_flow",           # 슬라이드 흐름
+        # 차트 구조 메타(원본 값/라벨 아님 — 유형·개수·유무만) — 통과.
+        "chart_type",           # 차트 유형(bar/line/pie…)
+        "category_count",       # 카테고리(축) 개수
+        "series_count",         # 시리즈 개수
+        "legend_present",       # 범례 유무
+        "data_labels_present",  # 데이터라벨 유무
         # 점수화에 쓰이는 추상 시그니처(원본 표현 아님) — 통과.
         "layout_similarity",
         "color_signature",
