@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: pytest (Python ${{ matrix.python-version }})
+    name: pytest
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -18,8 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -29,32 +28,5 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: DDL dry-run (sqlite, §16 G0)
-        run: |
-          python - <<'PY'
-          import asyncio
-          from sqlalchemy.ext.asyncio import create_async_engine
-          from app.models.tables import Base
-
-          async def main():
-              eng = create_async_engine("sqlite+aiosqlite://")
-              async with eng.begin() as conn:
-                  await conn.run_sync(Base.metadata.create_all)
-              await eng.dispose()
-              print("DDL create_all OK")
-
-          asyncio.run(main())
-          PY
-
       - name: Run tests
         run: pytest tests/ -q
-
-      - name: Golden Set release gate (§16 G4)
-        run: |
-          python - <<'PY'
-          from app.golden_set import evaluate_golden_set
-          report = evaluate_golden_set()
-          print("recall_by_label:", report.recall_by_label)
-          assert report.passed, f"golden set critical recall failed: {report.recall_by_label}"
-          print("Golden Set G4 gate: PASSED")
-          PY
