@@ -22,7 +22,7 @@ Seed → Frontier → Web Source API → Policy Gate(robots/license/PII)
 - **Crawl Job**: queued → policy_checking → ready → running → succeeded / failed_retryable / failed_terminal / cancelled
 - **Pattern**: built → abstraction_checked → reuse_risk_scored → approved / blocked / deprecated
 
-## 구현 현황 (422 tests green)
+## 구현 현황 (496 tests green)
 
 설계서 v2.0/v2.1/스파이크의 핵심 워크플로우가 구현·테스트·실사용 검증됨.
 
@@ -54,8 +54,55 @@ Python 3.11 / FastAPI / SQLAlchemy(async) / PostgreSQL+pgvector(운영)·sqlite(
 pip install -r requirements.txt
 psql < sql/001_init.sql        # DDL
 uvicorn app.main:app --reload  # API
-pytest tests/                  # 422 tests
+pytest tests/                  # 496 tests
 ```
+
+## 패턴 데이터셋 (수집·내보내기·블루프린트·검증)
+
+외부 데이터셋(DocLayNet·PubLayNet=CDLA-Permissive, AIHub 차트=비상업)을 거버넌스 통과시켜
+구조 패턴만 적재하고, 의도별 블루프린트·검증팩으로 내보낸다. 원본 표현은 미저장.
+
+```bash
+# 적재: 데이터셋 → 거버넌스 → web_patterns
+python scripts/ingest_patterns.py --source doclaynet   --input COCO/test.json --create-tables
+python scripts/ingest_patterns.py --source aihub_chart --input charts/            # AIHub 차트(재귀 글롭)
+python scripts/ingest_publaynet_hf.py --local-glob 'shards/train-*.parquet'       # PubLayNet parquet
+
+# 내보내기: web_patterns → GPT 활용 zip(jsonl+summary)
+python scripts/export_patterns.py --db-url sqlite+aiosqlite:///x.db --output patterns.zip
+
+# 블루프린트: 의도별 추천(슬라이드/차트) — DocLayNet 실측으로 보정
+python scripts/gen_presentation_blueprints.py --output slides.zip
+python scripts/calibrate_blueprints.py --summary <export summary.json> --output slides_calibrated.zip
+python scripts/gen_chart_blueprints.py --patterns <chart patterns.jsonl> --output charts.zip
+```
+
+### 검증팩 빌더 (원문/재현 + 추출 패턴)
+
+패턴 추출이 원문과 맞는지 육안 검증하는 팩(원문/재현 이미지 + bbox 오버레이/코드 + `pattern.json`).
+`--source` 로 3 출처 dispatch. 무거운 의존성(PIL·pyarrow·matplotlib·remotezip)은 지연 임포트.
+
+```bash
+# PubLayNet: parquet(이미지 내장) → 원문+오버레이+패턴
+python scripts/build_verification_pack.py --source publaynet \
+  --parquet-glob 'shards/train-*.parquet' --limit 100 --output pub.zip
+
+# DocLayNet: COCO + 로컬 페이지 PNG → 원문+오버레이+패턴
+python scripts/build_verification_pack.py --source doclaynet \
+  --coco COCO/test.json --png-dir dln_png/PNG --limit 80 --output dln.zip
+
+# AIHub 차트: visualize_code 재현(원문 아님) + 코드 + 패턴
+python scripts/build_verification_pack.py --source aihub_chart \
+  --input charts/ --per-type 15 --output chart.zip     # 유형별(bar/line/pie/mixed) 개수
+```
+
+| `--source` | 필수 인자 | 원문 | 라이선스 |
+|---|---|---|---|
+| `publaynet` | `--parquet-glob`, `--limit` | 페이지 이미지 | CDLA-Permissive(재배포 OK) |
+| `doclaynet` | `--coco`, `--png-dir`, `--limit` | 페이지 이미지 | CDLA-Permissive(재배포 OK) |
+| `aihub_chart` | `--input`, `--per-type`, `--font` | **재현**(원문 미배포) | AIHub 비상업 |
+
+검증: `_overlay`/`_rendered` 이미지의 영역·순서·차트유형 ↔ `_pattern.json`(section_order·region_ratios·chart_type) 대조.
 
 ## 재사용 (보유 자산 어댑터 — 인터페이스 고정, 폴백 동작)
 
